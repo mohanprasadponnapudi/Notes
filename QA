@@ -1,0 +1,83 @@
+=============
+Batch Class
+============
+
+global class BatchClassName implements Database.Batchble<SObject>{
+//Query the records
+global Database.QueryLocator start(Database.BatchableContext context) {
+String quey = 'SELECT Id, Name FROM Account';
+}
+global void execute(Database.BatchbleContext context, List<Account> scope){
+//Process the records in the batch
+for(Account acc:scope){
+System.debug('Account Name' + acc.Name;
+  }
+}
+global void finish(Database.BatchableContext context){
+
+}
+}
+===============================================================================================
+// To process 1 milion records, catch all failed records and send email to record owner
+==============================================================================================
+global class ProcessMillionRecordsBatch implements Database.Batchable<sObject>, Database.Stateful {
+    private List<Id> failedRecordOwnerIds = new List<Id>();
+    private List<String> sampleData = new List<String>();
+
+    global Database.QueryLocator start(Database.BatchableContext context) {
+        // Query the records you want to process (e.g., custom objects)
+        String query = 'SELECT Id, Name, OwnerId, CustomField__c, Description__c FROM CustomObject__c';
+        return Database.getQueryLocator(query);
+    }
+
+    global void execute(Database.BatchableContext context, List<CustomObject__c> scope) {
+        List<CustomObject__c> recordsToUpdate = new List<CustomObject__c>();
+
+        for (CustomObject__c customObj : scope) {
+            try {
+                // Check if the Description field is empty
+                if (String.isBlank(customObj.Description__c)) {
+                    // Add the record to the list of failed records
+                    failedRecordOwnerIds.add(customObj.OwnerId);
+                    sampleData.add('Record Name: ' + customObj.Name);
+                    continue; // Skip further processing for this record
+                }
+
+                // Your processing logic for non-empty descriptions
+                // ...
+
+                recordsToUpdate.add(customObj);
+            } catch (Exception e) {
+                // Handle the error for records with non-empty descriptions
+                // ...
+            }
+        }
+
+        if (!recordsToUpdate.isEmpty()) {
+            // Update the successful records
+            update recordsToUpdate;
+        }
+    }
+
+    global void finish(Database.BatchableContext context) {
+        // Notify the owners of failed records
+        if (!failedRecordOwnerIds.isEmpty()) {
+            List<Messaging.SingleEmailMessage> emails = new List<Messaging.SingleEmailMessage>();
+            for (Id ownerId : failedRecordOwnerIds) {
+                User owner = [SELECT Id, Email FROM User WHERE Id = :ownerId LIMIT 1];
+                if (owner != null) {
+                    Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+                    email.setToAddresses(new List<String>{owner.Email});
+                    email.setSubject('Failed Record Processing Notification');
+                    email.setPlainTextBody('Dear Record Owner, processing of your records with empty descriptions has failed. Details:\n\n' + String.join(sampleData, '\n'));
+                    emails.add(email);
+                }
+            }
+
+            if (!emails.isEmpty()) {
+                Messaging.sendEmail(emails);
+            }
+        }
+    }
+}
+
