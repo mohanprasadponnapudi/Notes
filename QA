@@ -22,7 +22,7 @@ global void finish(Database.BatchableContext context){
 ==============================================================================================
 global class ProcessMillionRecordsBatch implements Database.Batchable<sObject>, Database.Stateful {
     private List<Id> failedRecordOwnerIds = new List<Id>();
-    private List<String> sampleData = new List<String>();
+    private List<String> failedRecordDetails = new List<String>();
 
     global Database.QueryLocator start(Database.BatchableContext context) {
         // Query the records you want to process (e.g., custom objects)
@@ -31,32 +31,25 @@ global class ProcessMillionRecordsBatch implements Database.Batchable<sObject>, 
     }
 
     global void execute(Database.BatchableContext context, List<CustomObject__c> scope) {
-        List<CustomObject__c> recordsToUpdate = new List<CustomObject__c>();
-
         for (CustomObject__c customObj : scope) {
             try {
-                // Check if the Description field is empty
-                if (String.isBlank(customObj.Description__c)) {
-                    // Add the record to the list of failed records
-                    failedRecordOwnerIds.add(customObj.OwnerId);
-                    sampleData.add('Record Name: ' + customObj.Name);
-                    continue; // Skip further processing for this record
-                }
-
-                // Your processing logic for non-empty descriptions
+                // Your processing logic for records
                 // ...
 
-                recordsToUpdate.add(customObj);
+                // If the processing is successful, add it to the update list
+                // recordsToUpdate.add(customObj);
             } catch (Exception e) {
-                // Handle the error for records with non-empty descriptions
-                // ...
+                // Handle the error for records that caused exceptions
+                // In this case, add the record information to the list of failed records
+                failedRecordOwnerIds.add(customObj.OwnerId);
+                failedRecordDetails.add('Record Name: ' + customObj.Name + ' - Description: ' + customObj.Description__c);
             }
         }
 
-        if (!recordsToUpdate.isEmpty()) {
-            // Update the successful records
-            update recordsToUpdate;
-        }
+        // Update the successful records if needed
+        // if (!recordsToUpdate.isEmpty()) {
+        //     update recordsToUpdate;
+        // }
     }
 
     global void finish(Database.BatchableContext context) {
@@ -69,7 +62,7 @@ global class ProcessMillionRecordsBatch implements Database.Batchable<sObject>, 
                     Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                     email.setToAddresses(new List<String>{owner.Email});
                     email.setSubject('Failed Record Processing Notification');
-                    email.setPlainTextBody('Dear Record Owner, processing of your records with empty descriptions has failed. Details:\n\n' + String.join(sampleData, '\n'));
+                    email.setPlainTextBody('Dear Record Owner, processing of your records has failed. Details:\n\n' + String.join(failedRecordDetails, '\n'));
                     emails.add(email);
                 }
             }
@@ -80,4 +73,5 @@ global class ProcessMillionRecordsBatch implements Database.Batchable<sObject>, 
         }
     }
 }
+
 
